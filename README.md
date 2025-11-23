@@ -1,15 +1,29 @@
-# 🍫 Nestlé Product Demand Intelligence Dashboard
+# 🍪 Oreo Social Media Analytics Dashboard
 
-Real-time social media analytics dashboard for tracking product mentions, flavor trends, and temporal demand patterns across Twitter and YouTube.
+Real-time social media analytics dashboard for tracking Oreo product mentions, flavor trends, and consumer preferences across Twitter and YouTube.
 
 ## 🎯 Features
 
 - **Real-Time Data Collection**: Twitter API v2 & YouTube Data API v3
-- **Product Demand Tracking**: Monitor mentions of Nestlé products
-- **Flavor Intelligence**: Track trending flavors
-- **Temporal Analytics**: Quarter-over-Quarter & Year-over-Year comparisons
-- **Interactive Visualizations**: Plotly charts with filtering capabilities
+- **Product Variant Tracking**: Monitor mentions of Oreo Original, Double Stuf, Thins, Golden, Cakesters, and more
+- **Flavor Intelligence**: Track 30+ flavor varieties and consumer preferences
+- **Trend Analysis**: Identify product trends over time with interactive visualizations
+- **Separate Analytics**: Dedicated Twitter and YouTube analysis pages
 - **Auto-Refresh**: Configurable real-time updates
+
+## 🍪 Tracked Products
+
+- Oreo Original
+- Oreo Double Stuf
+- Oreo Thins
+- Oreo Golden
+- Oreo Mega Stuf
+- Oreo Cakesters
+- Oreo Bites
+
+## 🎨 Tracked Flavors (30+)
+
+Chocolate, Vanilla, Mint, Strawberry, Birthday Cake, Peanut Butter, Caramel, Red Velvet, Golden, Lemon, Matcha, Coffee, Cinnamon, Pumpkin, Eggnog, Candy Corn, Cherry Cola, Coconut, Dark Chocolate, Dulce de Leche, Hazelnut, Irish Cream, Key Lime Pie, Maple Creme, Orange, Pistachio, Raspberry, Salted Caramel, S'mores, Tiramisu, and more!
 
 ## 🚀 Live Demo
 
