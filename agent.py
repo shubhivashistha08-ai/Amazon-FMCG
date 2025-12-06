@@ -1,4 +1,3 @@
-# agent.py
 import os
 import requests
 import pandas as pd
@@ -7,14 +6,19 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-print("SERPAPI_API_KEY present?", bool(SERPAPI_API_KEY))
-print("OPENAI_API_KEY present?", bool(os.getenv("OPENAI_API_KEY")))
+
 load_dotenv()
 
 # IMPORTANT: use your secret name here
 SERPAPI_API_KEY = os.getenv("My_APIKey")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+print("SERPAPI_API_KEY present?", bool(SERPAPI_API_KEY))
+print("OPENAI_API_KEY present?", bool(OPENAI_API_KEY))
+
 if not SERPAPI_API_KEY:
-    raise RuntimeError("Set My_APIKey env var (SerpAPI key).")
+    # do NOT raise here any more, just log; otherwise the app dies before showing UI
+    print("WARNING: My_APIKey (SerpAPI) is missing or empty.")
 
 def fetch_amazon_peanut_data(keyword: str = "high protein peanut butter",
                              max_items: int = 20) -> pd.DataFrame:
