@@ -32,8 +32,7 @@ if prompt := st.chat_input("Ask about campaigns, products, or promo strategies..
     with st.chat_message("assistant"):
         with st.spinner("Agent is analyzing live Amazon data..."):
             try:
-                result = st.session_state.agent.invoke({"input": prompt})
-                # result is an AIMessage; get its text
+                result = st.session_state.agent({"input": prompt})
                 answer = getattr(result, "content", str(result))
             except Exception as e:
                 answer = f"Error from agent: {e}"
