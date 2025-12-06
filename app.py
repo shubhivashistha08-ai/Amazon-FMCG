@@ -19,7 +19,7 @@ if "messages" not in st.session_state:
     st.session_state.messages = []
 
 # Show history
-for msg in st.session_state.messages:
+for msg in st._state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
@@ -33,7 +33,8 @@ if prompt := st.chat_input("Ask about campaigns, products, or promo strategies..
         with st.spinner("Agent is analyzing live Amazon data..."):
             try:
                 result = st.session_state.agent.invoke({"input": prompt})
-                answer = result["output"]
+                # result is an AIMessage; get its text
+                answer = getattr(result, "content", str(result))
             except Exception as e:
                 answer = f"Error from agent: {e}"
             st.markdown(answer)
