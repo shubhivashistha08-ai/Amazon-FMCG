@@ -11,21 +11,39 @@ st.markdown(
 )
 
 st.write(
-    "This app fetches live Amazon data for viral peanut / nut butter products via SerpAPI, "
-    "shows basic retail insights, and lets you chat with an AI agent about campaigns, "
-    "promotion strategies, and product performance."
+    "This app can fetch live Amazon data for viral peanut / nut butter products via SerpAPI, "
+    "show basic retail insights, and let you chat with an AI agent about campaigns and promotions. "
+    "To avoid using API quota on every page load, click **Refresh data** when you want to update."
 )
 
 # ------------------------------------------------
-# Overview / basic insights
+# Data refresh control
+# ------------------------------------------------
+if "df" not in st.session_state:
+    st.session_state.df = pd.DataFrame()
+
+col_refresh, col_info = st.columns([1, 3])
+with col_refresh:
+    refresh_clicked = st.button("🔄 Refresh data from Amazon")
+with col_info:
+    if st.session_state.df.empty:
+        st.caption("No data loaded yet. Click **Refresh data from Amazon** to fetch live products.")
+    else:
+        st.caption("Using cached data from the last refresh. Click **Refresh** to update if needed.")
+
+if refresh_clicked:
+    with st.spinner("Calling SerpAPI and loading latest products..."):
+        st.session_state.df = fetch_amazon_peanut_data()
+
+df = st.session_state.df
+
+# ------------------------------------------------
+# Overview / basic insights (only if we have data)
 # ------------------------------------------------
 st.markdown("### Current Amazon Snapshot for Peanut / Nut Butters")
 
-with st.spinner("Loading latest products from Amazon via SerpAPI..."):
-    df = fetch_amazon_peanut_data()
-
 if df.empty:
-    st.warning("No live products returned from SerpAPI. Check your API key or quota.")
+    st.warning("No data available yet. Click **Refresh data from Amazon** above to fetch live data.")
 else:
     # High-level KPIs
     unique_products = df["asin"].nunique()
@@ -64,7 +82,6 @@ else:
 st.markdown("---")
 st.markdown("### Ask the AI agent about campaigns, products, or promo strategies")
 
-# Build agent once
 if "agent" not in st.session_state:
     st.session_state.agent = build_agent()
 if "messages" not in st.session_state:
@@ -77,17 +94,16 @@ for msg in st.session_state.messages:
 
 # User input
 if prompt := st.chat_input("Ask about campaigns, products, or promo strategies..."):
-    # log user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
-        st.markmarkdown(prompt)
+        st.markdown(prompt)
 
-    # agent response
     with st.chat_message("assistant"):
-        with st.spinner("Agent is analyzing live Amazon data..."):
+        with st.spinner("Agent is analyzing data (using last fetched snapshot)..."):
             try:
+                # Agent still fetches live inside tools if you call them;
+                # this keeps the structure but you can later change tools to use st.session_state.df.
                 result = st.session_state.agent({"input": prompt})
-                # result is an AIMessage; get its text
                 answer = getattr(result, "content", str(result))
             except Exception as e:
                 answer = f"Error from agent: {e}"
