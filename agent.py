@@ -29,7 +29,7 @@ def fetch_amazon_peanut_data(
 ) -> pd.DataFrame:
 
     params = {
-        "engine": "amazon_search",
+        "engine": "amazon",
         "amazon_domain": "amazon.com",
         "q": keyword,
         "api_key": SERPAPI_API_KEY,
