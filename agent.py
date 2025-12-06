@@ -28,8 +28,12 @@ def fetch_amazon_peanut_data(
     max_items: int = 20
 ) -> pd.DataFrame:
 
+    if not SERPAPI_API_KEY:
+        print("❌ SERPAPI_API_KEY is missing.")
+        return pd.DataFrame()
+
     params = {
-        "engine": "amazon",
+        "engine": "amazon",  # ✅ MOST STABLE ENGINE
         "amazon_domain": "amazon.com",
         "q": keyword,
         "api_key": SERPAPI_API_KEY,
@@ -37,33 +41,39 @@ def fetch_amazon_peanut_data(
     }
 
     try:
-        resp = requests.get(
-            "https://serpapi.com/search.json",
-            params=params,
-            timeout=30
-        )
+        resp = requests.get("https://serpapi.com/search.json", params=params, timeout=30)
+
+        print("✅ SerpAPI Status Code:", resp.status_code)
 
         if resp.status_code != 200:
-            print("SerpAPI error status:", resp.status_code)
-            print("SerpAPI error body:", resp.text[:400])
+            print("❌ SerpAPI Error Body:", resp.text[:500])
             return pd.DataFrame()
 
+        data = resp.json()
+        print("✅ SerpAPI Response Keys:", data.keys())
+
     except requests.RequestException as e:
-        print("SerpAPI request failed:", e)
+        print("❌ SerpAPI request failed:", e)
         return pd.DataFrame()
 
-    data = resp.json()
+    # ✅ CRITICAL FIX: handle BOTH result types safely
+    results = data.get("organic_results") or data.get("shopping_results") or []
+
+    if not results:
+        print("❌ No organic_results or shopping_results found in SerpAPI response.")
+        return pd.DataFrame()
 
     products = []
-    for p in data.get("organic_results", []):
+
+    for p in results:
         asin = p.get("asin")
         title = p.get("title")
 
+        if not asin or not title:
+            continue
+
         price = None
         list_price = None
-        rating = p.get("rating")
-        reviews = p.get("ratings_total")
-        position = p.get("position")
 
         if isinstance(p.get("price"), dict):
             price = p["price"].get("value")
@@ -75,8 +85,9 @@ def fetch_amazon_peanut_data(
         elif isinstance(p.get("list_price"), (int, float)):
             list_price = p["list_price"]
 
-        if not asin or not title:
-            continue
+        rating = p.get("rating")
+        reviews = p.get("ratings_total") or p.get("reviews")
+        position = p.get("position")
 
         products.append(
             {
@@ -88,33 +99,30 @@ def fetch_amazon_peanut_data(
                 "list_price": list_price,
                 "rating": rating,
                 "review_count": reviews,
-                "search_position": position,
+                "search_position": position or 1000,
                 "is_sponsored": 1 if position and position <= 3 else 0,
             }
         )
 
     df = pd.DataFrame(products)
+
     if df.empty:
+        print("❌ DataFrame built but EMPTY after parsing.")
         return df
 
+    # ✅ Discount Calculation
     df["discount_pct"] = 0.0
-    mask = (
-        df["price"].notna()
-        & df["list_price"].notna()
-        & (df["list_price"] > 0)
-    )
-
+    mask = df["price"].notna() & df["list_price"].notna() & (df["list_price"] > 0)
     df.loc[mask, "discount_pct"] = (
-        100.0
-        * (df.loc[mask, "list_price"] - df.loc[mask, "price"])
-        / df.loc[mask, "list_price"]
+        100.0 * (df.loc[mask, "list_price"] - df.loc[mask, "price"]) / df.loc[mask, "list_price"]
     )
 
+    # ✅ Sales Proxy
     df["search_position"] = df["search_position"].fillna(1000)
     df["sales_proxy"] = 1_000.0 / df["search_position"].clip(lower=1)
 
+    print("✅ Products Loaded:", len(df))
     return df
-
 
 # -------------------------------
 # LangChain Tools
