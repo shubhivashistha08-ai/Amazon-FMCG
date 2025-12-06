@@ -1,0 +1,6 @@
+asin,title,brand,category,price,list_price,discount_pct,is_sponsored,ad_position,star_rating,review_count,sales_rank
+B000PB01,Crunchy Peanut Butter 500g,BrandA,Peanut Butter,250,300,16.7,1,1,4.6,1200,150
+B000PB02,Smooth Peanut Butter 1kg,BrandA,Peanut Butter,450,500,10.0,0,0,4.4,900,220
+B000PB03,High Protein Peanut Butter 400g,BrandB,Peanut Butter,320,400,20.0,1,2,4.8,2500,95
+B000PB04,Chocolate Peanut Spread 350g,BrandC,Peanut Butter,280,280,0.0,0,0,4.1,600,380
+B000PB05,Natural Peanut Butter 1kg,BrandD,Peanut Butter,520,650,20.0,0,0,4.7,1500,130
