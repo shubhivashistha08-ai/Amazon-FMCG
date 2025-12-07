@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from agent import build_agent, fetch_google_shopping_peanut_data
 
-st.set_page_config(page_title="FMCG Promo Intelligence Agent", layout="wide")
+st.set_page_config(page_title="FMCG Campaign Intelligence", layout="wide")
 
 st.markdown(
     "<h2 style='text-align:center;'>FMCG Campaign & Promotion Intelligence</h2>",
@@ -11,8 +11,8 @@ st.markdown(
 )
 
 st.write(
-    "Analyze live **Google Shopping market data** for peanut / nut butter products. "
-    "See **brand visibility**, **product ratings**, and **review volume** to plan campaigns like BOGO, influencer marketing, and samples."
+    "Analyze live Google Shopping market data for peanut / nut butter products. "
+    "See brand visibility, product ratings, and review volume to plan campaigns."
 )
 
 # ------------------------------------------------
@@ -37,7 +37,7 @@ st.markdown("### Market Overview")
 if df.empty:
     st.warning("No data available. Click **Refresh market data** above.")
 else:
-    # Campaign-focused metrics
+    # KPIs
     total_products = df["product_id"].nunique()
     avg_rating = df["rating"].dropna().mean()
     avg_reviews = df["review_count"].dropna().mean()
@@ -51,77 +51,125 @@ else:
     col4.metric("📢 Promoted %", f"{sponsored_pct:.1f}%")
     col5.metric("🏢 Brands", unique_brands)
 
-    # --------- Brand Visibility Chart ---------
-    st.markdown("#### Brand Market Presence")
+    # --------- DUAL CHART: Brand Visibility (Line + Bar) ---------
+    st.markdown("### Brand Market Presence")
     
-    brand_counts = df["brand"].value_counts().head(10)
+    col_chart, col_tables = st.columns([1.2, 1])
     
-    fig, ax = plt.subplots(figsize=(12, 5))
-    ax.barh(brand_counts.index, brand_counts.values, color="#1f77b4")
-    ax.set_xlabel("Number of Products Listed")
-    ax.set_title("Top 10 Brands by Product Count (Market Visibility)")
-    ax.invert_yaxis()
-    st.pyplot(fig)
-
-    # --------- Top-Rated Products (for influencer marketing) ---------
-    st.markdown("#### Top-Rated Products (Influencer Marketing Candidates)")
-    top_rated = df.nlargest(5, "rating")[["title", "brand", "rating", "review_count"]].reset_index(drop=True)
-    st.dataframe(top_rated, use_container_width=True, hide_index=True)
-
-    # --------- Most-Reviewed Products (high social proof) ---------
-    st.markdown("#### Most-Reviewed Products (High Social Proof)")
-    most_reviewed = df.nlargest(5, "review_count")[["title", "brand", "review_count", "rating"]].reset_index(drop=True)
-    st.dataframe(most_reviewed, use_container_width=True, hide_index=True)
-
-    # --------- Full product table ---------
-    st.markdown("#### All Products by Search Visibility")
-    display_df = (
-        df.sort_values("sales_proxy", ascending=False)
-          .head(20)[["title", "brand", "rating", "review_count", "search_position", "is_sponsored"]]
-          .reset_index(drop=True)
-    )
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    with col_chart:
+        brand_stats = df.groupby("brand").agg({
+            "product_id": "count",
+            "rating": "mean"
+        }).rename(columns={"product_id": "count", "rating": "avg_rating"}).sort_values("count", ascending=False).head(10)
+        
+        # Create figure with dual axis
+        fig, ax1 = plt.subplots(figsize=(10, 6))
+        fig.patch.set_facecolor('white')
+        ax1.set_facecolor('white')
+        
+        # Bar chart for product count
+        bars = ax1.bar(range(len(brand_stats)), brand_stats["count"], color="#1f77b4", alpha=0.7, label="Product Count")
+        ax1.set_ylabel("Product Count", color="white", fontsize=10)
+        ax1.tick_params(axis='y', labelcolor="white")
+        ax1.set_xticks(range(len(brand_stats)))
+        ax1.set_xticklabels(brand_stats.index, rotation=45, ha="right", color="white", fontsize=9)
+        ax1.set_title("Brand Market Presence", color="white", fontsize=12, fontweight="bold")
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.spines['left'].set_color('white')
+        ax1.spines['bottom'].set_color('white')
+        
+        # Line chart for avg rating (on secondary axis)
+        ax2 = ax1.twinx()
+        ax2.set_facecolor('white')
+        line = ax2.plot(range(len(brand_stats)), brand_stats["avg_rating"], color="#ff7f0e", marker="o", linewidth=2, markersize=6, label="Avg Rating")
+        ax2.set_ylabel("Avg Rating", color="white", fontsize=10)
+        ax2.tick_params(axis='y', labelcolor="white")
+        ax2.spines['top'].set_visible(False)
+        ax2.spines['right'].set_color('white')
+        
+        plt.tight_layout()
+        st.pyplot(fig)
+    
+    with col_tables:
+        # Top-Rated Products
+        st.markdown("#### ⭐ Top-Rated Products")
+        top_rated = df.nlargest(5, "rating")[["title", "rating", "review_count"]].reset_index(drop=True)
+        st.dataframe(top_rated, use_container_width=True, hide_index=True)
+        
+        st.markdown("")
+        
+        # Most-Reviewed Products
+        st.markdown("#### 💬 Most-Reviewed Products")
+        most_reviewed = df.nlargest(5, "review_count")[["title", "review_count", "rating"]].reset_index(drop=True)
+        st.dataframe(most_reviewed, use_container_width=True, hide_index=True)
 
 # ------------------------------------------------
-# Chat agent section (with error handling)
+# Chat agent section with product selector
 # ------------------------------------------------
 st.markdown("---")
 st.markdown("### AI Campaign Advisor")
-st.caption("Ask about BOGO offers, influencer partnerships, free samples, seasonal campaigns, or brand strategies.")
 
 if "agent" not in st.session_state:
     st.session_state.agent = build_agent()
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Product selector dropdown
+if not df.empty:
+    product_options = df[["product_id", "title", "brand", "rating", "review_count"]].drop_duplicates()
+    selected_product = st.selectbox(
+        "Select a product for campaign analysis:",
+        options=range(len(product_options)),
+        format_func=lambda i: f"{product_options.iloc[i]['title']} ({product_options.iloc[i]['brand']}) - ⭐{product_options.iloc[i]['rating']}"
+    )
+    
+    selected_prod_data = product_options.iloc[selected_product]
+    st.caption(
+        f"**Selected**: {selected_prod_data['title']} | "
+        f"Brand: {selected_prod_data['brand']} | "
+        f"Rating: {selected_prod_data['rating']} | "
+        f"Reviews: {selected_prod_data['review_count']}"
+    )
+else:
+    st.warning("Refresh data first to select a product.")
+    selected_product = None
+
+# Chat history
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask about campaigns, BOGO, influencer marketing, or brand strategies..."):
+# Chat input
+if prompt := st.chat_input("Ask campaign strategies for the selected product..."):
+    # Add product context to the prompt
+    if not df.empty and selected_product is not None:
+        prod = product_options.iloc[selected_product]
+        context_prompt = (
+            f"For the product '{prod['title']}' (brand: {prod['brand']}, rating: {prod['rating']}, reviews: {prod['review_count']}): {prompt}"
+        )
+    else:
+        context_prompt = prompt
+    
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
     with st.chat_message("assistant"):
-        with st.spinner("Analyzing market data..."):
+        with st.spinner("Analyzing campaign strategies..."):
             try:
-                result = st.session_state.agent({"input": prompt})
+                result = st.session_state.agent({"input": context_prompt})
                 answer = getattr(result, "content", str(result))
             except Exception as e:
                 error_msg = str(e)
                 if "insufficient_quota" in error_msg.lower():
                     answer = (
                         "⚠️ **OpenAI API Quota Exceeded**\n\n"
-                        "Your OpenAI account has no remaining credits. "
-                        "Please:\n"
-                        "1. Go to [OpenAI Dashboard](https://platform.openai.com/account/billing/overview)\n"
-                        "2. Add a payment method or check your billing status\n"
-                        "3. Wait ~5 minutes for quota to reset\n\n"
-                        "In the meantime, use the data tables above to plan campaigns."
+                        "Your OpenAI account needs a payment method. "
+                        "Please add credits at [OpenAI Billing](https://platform.openai.com/account/billing/overview)"
                     )
                 else:
-                    answer = f"❌ Error: {error_msg}\n\nTry again or check your OpenAI API key in Streamlit secrets."
+                    answer = f"❌ Error: {error_msg}"
             st.markdown(answer)
 
     st.session_state.messages.append({"role": "assistant", "content": answer})
