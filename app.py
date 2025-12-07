@@ -21,14 +21,7 @@ st.write(
 if "df" not in st.session_state:
     st.session_state.df = pd.DataFrame()
 
-col_refresh, col_info = st.columns([1, 3])
-with col_refresh:
-    refresh_clicked = st.button("🔄 Refresh market data")
-with col_info:
-    if st.session_state.df.empty:
-        st.caption("No data loaded yet. Click **Refresh market data** to fetch live products.")
-    else:
-        st.caption("Using cached data. Click to refresh.")
+refresh_clicked = st.button("🔄 Refresh market data")
 
 if refresh_clicked:
     with st.spinner("Fetching latest market data..."):
