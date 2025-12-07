@@ -71,7 +71,7 @@ else:
             "rating": "mean"
         }).rename(columns={"product_id": "count", "rating": "avg_rating"}).sort_values("count", ascending=False).head(10)
         
-        fig, ax1 = plt.subplots(figsize=(9, 6))
+        fig, ax1 = plt.subplots(figsize=(7, 6.5))
         fig.patch.set_facecolor('#0a0e27')
         ax1.set_facecolor('#0a0e27')
         
@@ -85,7 +85,7 @@ else:
         ax1.set_ylabel("Product Count", color="white", fontsize=11, fontweight="bold")
         ax1.tick_params(axis='y', labelcolor="white", labelsize=9)
         ax1.set_xticks(range(len(brand_stats)))
-        ax1.set_xticklabels(brand_stats.index, rotation=45, ha="right", color="white", fontsize=9)
+        ax1.set_xticklabels(brand_stats.index, rotation=45, ha="right", color="white", fontsize=8)
         ax1.spines['top'].set_visible(False)
         ax1.spines['right'].set_visible(False)
         ax1.spines['left'].set_color('#0d7377')
@@ -111,11 +111,12 @@ else:
         ax2.set_ylim([0, 5.5])
         ax2.grid(False)
         
-        # Legend
+        # Legend at the bottom
         lines1, labels1 = ax1.get_legend_handles_labels()
         lines2, labels2 = ax2.get_legend_handles_labels()
-        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', 
-                  facecolor='#0a0e27', edgecolor='white', labelcolor='white', fontsize=9)
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='lower center', 
+                  bbox_to_anchor=(0.5, -0.25), facecolor='#0a0e27', edgecolor='white', 
+                  labelcolor='white', fontsize=9, ncol=2)
         
         plt.tight_layout()
         st.pyplot(fig, use_container_width=True)
@@ -130,8 +131,35 @@ else:
         if other_count > 0:
             brand_share = pd.concat([brand_share, pd.Series({"Others": other_count})])
         
-        fig_pie, ax_pie = plt.subplots(figsize=(9, 6))
+        fig_pie, ax_pie = plt.subplots(figsize=(7, 6.5))
         fig_pie.patch.set_facecolor('#0a0e27')
+        
+        # Green & Blue color palette
+        colors_palette = ["#0d7377", "#14b8a6", "#06b6d4", "#22d3ee", "#67e8f9", "#cbd5e1"]
+        
+        wedges, texts, autotexts = ax_pie.pie(
+            brand_share.values,
+            labels=brand_share.index,
+            autopct='%1.1f%%',
+            colors=colors_palette[:len(brand_share)],
+            startangle=90,
+            textprops={'fontsize': 10, 'weight': 'bold'}
+        )
+        
+        # Format text colors
+        for text in texts:
+            text.set_color('white')
+            text.set_fontsize(10)
+            text.set_fontweight('bold')
+        
+        for autotext in autotexts:
+            autotext.set_color('white')
+            autotext.set_fontsize(9)
+            autotext.set_fontweight('bold')
+        
+        plt.tight_layout()
+        st.pyplot(fig_pie, use_container_width=True)
+
         
         # Green & Blue color palette
         colors_palette = ["#0d7377", "#14b8a6", "#06b6d4", "#22d3ee", "#67e8f9", "#cbd5e1"]
