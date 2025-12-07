@@ -5,8 +5,16 @@ from agent import build_agent, fetch_google_shopping_peanut_data
 
 st.set_page_config(page_title="FMCG Campaign Intelligence", layout="wide")
 
+# Set dark theme
+st.markdown("""
+    <style>
+        body { background-color: #0a0e27; }
+        .stMetric { background-color: rgba(255,255,255,0.05); border-radius: 8px; padding: 15px; }
+    </style>
+""", unsafe_allow_html=True)
+
 st.markdown(
-    "<h2 style='text-align:center;'>FMCG Campaign & Promotion Intelligence</h2>",
+    "<h2 style='text-align:center; color:white;'>FMCG Campaign & Promotion Intelligence</h2>",
     unsafe_allow_html=True,
 )
 
@@ -41,67 +49,103 @@ else:
     total_products = df["product_id"].nunique()
     avg_rating = df["rating"].dropna().mean()
     avg_reviews = df["review_count"].dropna().mean()
-    sponsored_pct = (df["is_sponsored"].sum() / len(df) * 100) if len(df) > 0 else 0
     unique_brands = df["brand"].nunique()
 
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4 = st.columns(4)
     col1.metric("🛍️ Products", total_products)
     col2.metric("⭐ Avg Rating", f"{avg_rating:.2f}" if pd.notna(avg_rating) else "N/A")
     col3.metric("💬 Avg Reviews", f"{avg_reviews:.0f}" if pd.notna(avg_reviews) else "N/A")
-    col4.metric("📢 Promoted %", f"{sponsored_pct:.1f}%")
-    col5.metric("🏢 Brands", unique_brands)
+    col4.metric("🏢 Brands", unique_brands)
 
-    # --------- DUAL CHART: Brand Visibility (Line + Bar) ---------
-    st.markdown("### Brand Market Presence")
+    # --------- CHARTS SECTION ---------
+    st.markdown("### Market Analysis")
     
-    col_chart, col_tables = st.columns([1.2, 1])
+    col_brand_presence, col_market_share = st.columns(2)
     
-    with col_chart:
+    # LEFT: Brand Market Presence (Bar + Line)
+    with col_brand_presence:
+        st.markdown("#### Brand Market Presence")
+        
         brand_stats = df.groupby("brand").agg({
             "product_id": "count",
             "rating": "mean"
         }).rename(columns={"product_id": "count", "rating": "avg_rating"}).sort_values("count", ascending=False).head(10)
         
-        # Create figure with dual axis
-        fig, ax1 = plt.subplots(figsize=(10, 6))
-        fig.patch.set_facecolor('white')
-        ax1.set_facecolor('white')
+        fig, ax1 = plt.subplots(figsize=(10, 5))
+        fig.patch.set_facecolor('#0a0e27')
+        ax1.set_facecolor('#0a0e27')
         
         # Bar chart for product count
-        bars = ax1.bar(range(len(brand_stats)), brand_stats["count"], color="#1f77b4", alpha=0.7, label="Product Count")
-        ax1.set_ylabel("Product Count", color="white", fontsize=10)
-        ax1.tick_params(axis='y', labelcolor="white")
+        bars = ax1.bar(range(len(brand_stats)), brand_stats["count"], color="#1f77b4", alpha=0.8, label="Product Count")
+        ax1.set_ylabel("Product Count", color="white", fontsize=10, fontweight="bold")
+        ax1.tick_params(axis='y', labelcolor="white", labelsize=9)
         ax1.set_xticks(range(len(brand_stats)))
         ax1.set_xticklabels(brand_stats.index, rotation=45, ha="right", color="white", fontsize=9)
-        ax1.set_title("Brand Market Presence", color="white", fontsize=12, fontweight="bold")
         ax1.spines['top'].set_visible(False)
         ax1.spines['right'].set_visible(False)
         ax1.spines['left'].set_color('white')
         ax1.spines['bottom'].set_color('white')
+        ax1.grid(axis='y', alpha=0.2, color='white')
         
-        # Line chart for avg rating (on secondary axis)
+        # Line chart for avg rating (secondary axis)
         ax2 = ax1.twinx()
-        ax2.set_facecolor('white')
-        line = ax2.plot(range(len(brand_stats)), brand_stats["avg_rating"], color="#ff7f0e", marker="o", linewidth=2, markersize=6, label="Avg Rating")
-        ax2.set_ylabel("Avg Rating", color="white", fontsize=10)
-        ax2.tick_params(axis='y', labelcolor="white")
+        ax2.set_facecolor('#0a0e27')
+        line = ax2.plot(range(len(brand_stats)), brand_stats["avg_rating"], color="#ff7f0e", marker="o", linewidth=2.5, markersize=7, label="Avg Rating")
+        ax2.set_ylabel("Avg Rating", color="white", fontsize=10, fontweight="bold")
+        ax2.tick_params(axis='y', labelcolor="white", labelsize=9)
         ax2.spines['top'].set_visible(False)
         ax2.spines['right'].set_color('white')
+        ax2.set_ylim([0, 5.5])
         
         plt.tight_layout()
-        st.pyplot(fig)
+        st.pyplot(fig, use_container_width=True)
     
-    with col_tables:
-        # Top-Rated Products
+    # RIGHT: Brand Market Share (Pie Chart)
+    with col_market_share:
+        st.markdown("#### Brand Market Share")
+        
+        brand_share = df["brand"].value_counts().head(10)
+        other_count = df["brand"].value_counts().iloc[10:].sum() if len(df["brand"].value_counts()) > 10 else 0
+        
+        if other_count > 0:
+            brand_share = pd.concat([brand_share, pd.Series({"Other": other_count})])
+        
+        fig_pie, ax_pie = plt.subplots(figsize=(8, 5))
+        fig_pie.patch.set_facecolor('#0a0e27')
+        
+        colors = plt.cm.Set3(range(len(brand_share)))
+        wedges, texts, autotexts = ax_pie.pie(
+            brand_share.values,
+            labels=brand_share.index,
+            autopct='%1.1f%%',
+            colors=colors,
+            startangle=90
+        )
+        
+        # Format text colors
+        for text in texts:
+            text.set_color('white')
+            text.set_fontsize(9)
+        for autotext in autotexts:
+            autotext.set_color('black')
+            autotext.set_fontsize(8)
+            autotext.set_fontweight('bold')
+        
+        st.pyplot(fig_pie, use_container_width=True)
+
+    # --------- PRODUCT TABLES ---------
+    st.markdown("### Top Products")
+    
+    col_top_rated, col_most_reviewed = st.columns(2)
+    
+    with col_top_rated:
         st.markdown("#### ⭐ Top-Rated Products")
-        top_rated = df.nlargest(5, "rating")[["title", "rating", "review_count"]].reset_index(drop=True)
+        top_rated = df.nlargest(5, "rating")[["title", "rating"]].reset_index(drop=True)
         st.dataframe(top_rated, use_container_width=True, hide_index=True)
-        
-        st.markdown("")
-        
-        # Most-Reviewed Products
+    
+    with col_most_reviewed:
         st.markdown("#### 💬 Most-Reviewed Products")
-        most_reviewed = df.nlargest(5, "review_count")[["title", "review_count", "rating"]].reset_index(drop=True)
+        most_reviewed = df.nlargest(5, "review_count")[["title", "review_count"]].reset_index(drop=True)
         st.dataframe(most_reviewed, use_container_width=True, hide_index=True)
 
 # ------------------------------------------------
@@ -128,8 +172,8 @@ if not df.empty:
     st.caption(
         f"**Selected**: {selected_prod_data['title']} | "
         f"Brand: {selected_prod_data['brand']} | "
-        f"Rating: {selected_prod_data['rating']} | "
-        f"Reviews: {selected_prod_data['review_count']}"
+        f"Rating: ⭐{selected_prod_data['rating']} | "
+        f"Reviews: 💬{int(selected_prod_data['review_count'])}"
     )
 else:
     st.warning("Refresh data first to select a product.")
@@ -141,12 +185,13 @@ for msg in st.session_state.messages:
         st.markdown(msg["content"])
 
 # Chat input
-if prompt := st.chat_input("Ask campaign strategies for the selected product..."):
+if prompt := st.chat_input("Ask campaign strategies (BOGO, influencer, samples, seasonal)..."):
     # Add product context to the prompt
     if not df.empty and selected_product is not None:
         prod = product_options.iloc[selected_product]
         context_prompt = (
-            f"For the product '{prod['title']}' (brand: {prod['brand']}, rating: {prod['rating']}, reviews: {prod['review_count']}): {prompt}"
+            f"For the product '{prod['title']}' (brand: {prod['brand']}, rating: {prod['rating']}, reviews: {int(prod['review_count'])}), "
+            f"suggest campaign strategies. User asks: {prompt}"
         )
     else:
         context_prompt = prompt
@@ -165,8 +210,7 @@ if prompt := st.chat_input("Ask campaign strategies for the selected product..."
                 if "insufficient_quota" in error_msg.lower():
                     answer = (
                         "⚠️ **OpenAI API Quota Exceeded**\n\n"
-                        "Your OpenAI account needs a payment method. "
-                        "Please add credits at [OpenAI Billing](https://platform.openai.com/account/billing/overview)"
+                        "Add credits at [OpenAI Billing](https://platform.openai.com/account/billing/overview)"
                     )
                 else:
                     answer = f"❌ Error: {error_msg}"
