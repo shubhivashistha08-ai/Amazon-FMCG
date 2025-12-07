@@ -62,74 +62,105 @@ else:
     
     col_brand_presence, col_market_share = st.columns(2)
     
-    # LEFT: Brand Market Presence (Bar + Line)
+    # LEFT: Brand Market Presence (Bar + Line with data labels)
     with col_brand_presence:
-        st.markdown("#### Brand Market Presence")
+        st.markdown("#### Brand Market Presence & Growth")
         
         brand_stats = df.groupby("brand").agg({
             "product_id": "count",
             "rating": "mean"
         }).rename(columns={"product_id": "count", "rating": "avg_rating"}).sort_values("count", ascending=False).head(10)
         
-        fig, ax1 = plt.subplots(figsize=(10, 5))
+        fig, ax1 = plt.subplots(figsize=(9, 6))
         fig.patch.set_facecolor('#0a0e27')
         ax1.set_facecolor('#0a0e27')
         
-        # Bar chart for product count
-        bars = ax1.bar(range(len(brand_stats)), brand_stats["count"], color="#1f77b4", alpha=0.8, label="Product Count")
-        ax1.set_ylabel("Product Count", color="white", fontsize=10, fontweight="bold")
+        # Bar chart for product count with value labels
+        bars = ax1.bar(range(len(brand_stats)), brand_stats["count"], color="#0d7377", alpha=0.8, label="Product Count", edgecolor='white', linewidth=1.5)
+        
+        # Add value labels on bars
+        for i, (idx, val) in enumerate(brand_stats["count"].items()):
+            ax1.text(i, val + 0.1, str(int(val)), ha='center', va='bottom', color='white', fontweight='bold', fontsize=9)
+        
+        ax1.set_ylabel("Product Count", color="white", fontsize=11, fontweight="bold")
         ax1.tick_params(axis='y', labelcolor="white", labelsize=9)
         ax1.set_xticks(range(len(brand_stats)))
         ax1.set_xticklabels(brand_stats.index, rotation=45, ha="right", color="white", fontsize=9)
         ax1.spines['top'].set_visible(False)
         ax1.spines['right'].set_visible(False)
-        ax1.spines['left'].set_color('white')
+        ax1.spines['left'].set_color('#0d7377')
         ax1.spines['bottom'].set_color('white')
-        ax1.grid(axis='y', alpha=0.2, color='white')
+        ax1.grid(axis='y', alpha=0.15, color='white', linestyle='--')
         
-        # Line chart for avg rating (secondary axis)
+        # Line chart for avg rating (secondary axis) with data labels
         ax2 = ax1.twinx()
         ax2.set_facecolor('#0a0e27')
-        line = ax2.plot(range(len(brand_stats)), brand_stats["avg_rating"], color="#ff7f0e", marker="o", linewidth=2.5, markersize=7, label="Avg Rating")
-        ax2.set_ylabel("Avg Rating", color="white", fontsize=10, fontweight="bold")
-        ax2.tick_params(axis='y', labelcolor="white", labelsize=9)
+        line = ax2.plot(range(len(brand_stats)), brand_stats["avg_rating"], 
+                       color="#14b8a6", marker="o", linewidth=3, markersize=8, 
+                       label="Avg Rating (Growth Trend)", zorder=5)
+        
+        # Add value labels on line points
+        for i, (idx, val) in enumerate(brand_stats["avg_rating"].items()):
+            ax2.text(i, val + 0.15, f"{val:.2f}", ha='center', va='bottom', 
+                    color='#14b8a6', fontweight='bold', fontsize=8)
+        
+        ax2.set_ylabel("Avg Rating (Quality Score)", color="#14b8a6", fontsize=11, fontweight="bold")
+        ax2.tick_params(axis='y', labelcolor="#14b8a6", labelsize=9)
         ax2.spines['top'].set_visible(False)
-        ax2.spines['right'].set_color('white')
+        ax2.spines['right'].set_color('#14b8a6')
         ax2.set_ylim([0, 5.5])
+        ax2.grid(False)
+        
+        # Legend
+        lines1, labels1 = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax1.legend(lines1 + lines2, labels1 + labels2, loc='upper right', 
+                  facecolor='#0a0e27', edgecolor='white', labelcolor='white', fontsize=9)
         
         plt.tight_layout()
         st.pyplot(fig, use_container_width=True)
     
-    # RIGHT: Brand Market Share (Pie Chart)
+    # RIGHT: Brand Market Share (Top 5 + Others, Pie Chart with green-blue palette)
     with col_market_share:
-        st.markdown("#### Brand Market Share")
+        st.markdown("#### Brand Market Share (Top 5)")
         
-        brand_share = df["brand"].value_counts().head(10)
-        other_count = df["brand"].value_counts().iloc[10:].sum() if len(df["brand"].value_counts()) > 10 else 0
+        brand_share = df["brand"].value_counts().head(5)
+        other_count = df["brand"].value_counts().iloc[5:].sum() if len(df["brand"].value_counts()) > 5 else 0
         
         if other_count > 0:
-            brand_share = pd.concat([brand_share, pd.Series({"Other": other_count})])
+            brand_share = pd.concat([brand_share, pd.Series({"Others": other_count})])
         
-        fig_pie, ax_pie = plt.subplots(figsize=(8, 5))
+        fig_pie, ax_pie = plt.subplots(figsize=(9, 6))
         fig_pie.patch.set_facecolor('#0a0e27')
         
-        colors = plt.cm.Set3(range(len(brand_share)))
+        # Green & Blue color palette
+        colors_palette = ["#0d7377", "#14b8a6", "#06b6d4", "#22d3ee", "#67e8f9", "#cbd5e1"]
+        
         wedges, texts, autotexts = ax_pie.pie(
             brand_share.values,
             labels=brand_share.index,
             autopct='%1.1f%%',
-            colors=colors,
-            startangle=90
+            colors=colors_palette[:len(brand_share)],
+            startangle=90,
+            textprops={'fontsize': 10, 'weight': 'bold'}
         )
         
         # Format text colors
         for text in texts:
             text.set_color('white')
-            text.set_fontsize(9)
+            text.set_fontsize(10)
+            text.set_fontweight('bold')
+        
         for autotext in autotexts:
-            autotext.set_color('black')
-            autotext.set_fontsize(8)
+            autotext.set_color('white')
+            autotext.set_fontsize(9)
             autotext.set_fontweight('bold')
+        
+        # Add value counts to labels
+        for i, (text, wedge) in enumerate(zip(texts, wedges)):
+            label = text.get_text()
+            value = brand_share.values[i]
+            text.set_text(f"{label}\n({int(value)} products)")
         
         st.pyplot(fig_pie, use_container_width=True)
 
