@@ -5,15 +5,14 @@ from agent import build_agent, fetch_google_shopping_peanut_data
 st.set_page_config(page_title="FMCG Promo Intelligence Agent", layout="wide")
 
 st.markdown(
-    "<h2 style='text-align:center;'>FMCG Promo Intelligence Agent (Google Shopping → Amazon Signal)</h2>",
+    "<h2 style='text-align:center;'>FMCG Campaign & Promotion Intelligence (Google Shopping → Amazon Signal)</h2>",
     unsafe_allow_html=True,
 )
 
 st.write(
-    "This app fetches live **Google Shopping market data** for viral peanut / nut butter products, "
-    "uses it as a **proxy for Amazon demand**, shows retail insights, and lets you chat with an AI "
-    "agent about campaigns and promotions. "
-    "To avoid using API quota on every page load, click **Refresh Data** when you want to update."
+    "This app analyzes live **Google Shopping market data** for peanut / nut butter products as a proxy for **Amazon demand**, "
+    "shows **campaign readiness metrics**, and lets you chat with an AI agent about promotion strategies like BOGO, influencer marketing, and samples. "
+    "Click **Refresh market data** to update."
 )
 
 # ------------------------------------------------
@@ -38,26 +37,47 @@ if refresh_clicked:
 df = st.session_state.df
 
 # ------------------------------------------------
-# Overview / basic insights
+# Campaign-focused Overview / KPIs
 # ------------------------------------------------
-st.markdown("### Current Market Snapshot (Google Shopping → Amazon Proxy)")
+st.markdown("### Campaign Market Snapshot (Google Shopping → Amazon Proxy)")
 
 if df.empty:
     st.warning("No data available yet. Click **Refresh market data** above.")
 else:
-    unique_products = df["product_id"].nunique()
+    # Campaign-focused metrics
+    total_products = df["product_id"].nunique()
     avg_price = df["price"].dropna().mean()
     avg_rating = df["rating"].dropna().mean()
+    avg_reviews = df["review_count"].dropna().mean()
+    sponsored_pct = (df["is_sponsored"].sum() / len(df) * 100) if len(df) > 0 else 0
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Products fetched", unique_products)
-    c2.metric("Avg price", f"{avg_price:,.2f}")
-    c3.metric("Avg rating", f"{avg_rating:.2f}" if pd.notna(avg_rating) else "N/A")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("🛍️ Products", total_products)
+    col2.metric("💰 Avg Price", f"${avg_price:,.0f}" if pd.notna(avg_price) else "N/A")
+    col3.metric("⭐ Avg Rating", f"{avg_rating:.2f}" if pd.notna(avg_rating) else "N/A")
+    col4.metric("💬 Avg Reviews", f"{avg_reviews:.0f}" if pd.notna(avg_reviews) else "N/A")
+    col5.metric("📢 Sponsored %", f"{sponsored_pct:.1f}%")
 
-    st.markdown("#### Top products by visibility (sales proxy)")
+    # Campaign insights
+    st.markdown("#### Strategic Insights for Campaign Planning")
+    
+    insight_cols = st.columns(2)
+    
+    with insight_cols[0]:
+        st.markdown("**Top-Rated Products** (Best for Influencer Marketing)")
+        top_rated = df.nlargest(5, "rating")[["title", "brand", "rating", "review_count"]]
+        st.dataframe(top_rated, use_container_width=True)
+    
+    with insight_cols[1]:
+        st.markdown("**Most-Reviewed Products** (High Social Proof)")
+        most_reviewed = df.nlargest(5, "review_count")[["title", "brand", "review_count", "rating"]]
+        st.dataframe(most_reviewed, use_container_width=True)
+
+    # Full product table
+    st.markdown("#### All Products by Search Visibility (Campaign Priority)")
     top_df = (
         df.sort_values("sales_proxy", ascending=False)
-          .head(10)[
+          .head(15)[
               [
                   "product_id",
                   "title",
@@ -66,6 +86,7 @@ else:
                   "rating",
                   "review_count",
                   "search_position",
+                  "is_sponsored",
               ]
           ]
     )
@@ -75,7 +96,8 @@ else:
 # Chat agent section
 # ------------------------------------------------
 st.markdown("---")
-st.markdown("### Ask the AI agent about campaigns, products, or promo strategies")
+st.markdown("### AI Agent: Campaign & Promo Strategy Advisor")
+st.caption("Ask about BOGO offers, influencer partnerships, free samples, seasonal campaigns, or discount strategies.")
 
 if "agent" not in st.session_state:
     st.session_state.agent = build_agent()
@@ -86,7 +108,7 @@ for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("Ask about campaigns, products, or promo strategies..."):
+if prompt := st.chat_input("Ask about BOGO, influencer marketing, samples, or campaigns..."):
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
