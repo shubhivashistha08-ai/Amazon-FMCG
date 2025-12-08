@@ -1,8 +1,10 @@
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from agent import build_agent, fetch_google_shopping_peanut_data
+from promotions import get_price_history, detect_promotions
 
 st.set_page_config(page_title="FMCG Campaign Intelligence", layout="wide")
 
@@ -100,8 +102,8 @@ else:
         }).sort_values("total_sales", ascending=False).head(10)
 
         fig, ax1 = plt.subplots(figsize=(7, 6))
-        fig.patch.set_facecolor('#1a1a2e')  # Dark background
-        ax1.set_facecolor('#1a1a2e')  # Dark background
+        fig.patch.set_facecolor('#1a1a2e')
+        ax1.set_facecolor('#1a1a2e')
 
         # Bar for sales
         bars = ax1.bar(
@@ -332,5 +334,136 @@ else:
 
         st.session_state.messages.append({"role": "assistant", "content": answer})
 
+    # ================================================
+    # SECTION 6: REAL-TIME PROMOTION & PRICING INTELLIGENCE
+    # ================================================
+    st.markdown("---")
+    st.markdown("### 💼 Real-Time Promotion & Price Intelligence (RapidAPI)")
+
+    # Configure RapidAPI
+    RAPIDAPI_KEY = st.secrets.get("RAPIDAPI_KEY", "")
+    RAPIDAPI_HOST = "amazon-price1.p.rapidapi.com"
+
+    # Input
+    asin_input = st.text_input(
+        "Enter Amazon ASIN (e.g., B00ABC123)",
+        placeholder="Find on Amazon product page",
+        help="Format: B + 9 digits"
+    )
+
+    if asin_input and RAPIDAPI_KEY:
+        st.info(f"🔍 Fetching promotion data for {asin_input}...")
+        
+        price_data = get_price_history(asin_input, RAPIDAPI_KEY, RAPIDAPI_HOST)
+        
+        if price_data and price_data.get('price_history'):
+            # Overview metrics
+            st.markdown("#### 📊 Product Overview")
+            
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Current Price", f"${price_data.get('current_price', 'N/A')}")
+            with col2:
+                st.metric("List Price", f"${price_data.get('list_price', 'N/A')}")
+            with col3:
+                st.metric("Discount", f"{price_data.get('discount_percent', 0):.0f}%")
+            with col4:
+                st.metric("Sellers", price_data.get('offer_count', 'N/A'))
+            
+            # Active deals
+            if price_data.get('deals'):
+                st.success(f"🎁 Active Deals: {' | '.join(price_data['deals'])}")
+            
+            # Detected promotions
+            promotions = detect_promotions(price_data)
+            
+            if promotions:
+                st.markdown("#### 📈 Detected Promotions")
+                promo_df = pd.DataFrame(promotions)
+                
+                st.dataframe(
+                    promo_df[[
+                        'date', 'price_before', 'price_during', 
+                        'discount_%', 'tactic'
+                    ]].rename(columns={
+                        'date': 'Date',
+                        'price_before': 'Price Before',
+                        'price_during': 'Price During',
+                        'discount_%': 'Discount %',
+                        'tactic': 'Tactic'
+                    }),
+                    use_container_width=True,
+                    hide_index=True
+                )
+                
+                # Statistics
+                st.markdown("#### 📊 Promotion Statistics")
+                col_s1, col_s2, col_s3 = st.columns(3)
+                with col_s1:
+                    st.metric("Total Promotions", len(promotions))
+                with col_s2:
+                    st.metric("Avg Discount %", f"{promo_df['discount_%'].mean():.1f}%")
+                with col_s3:
+                    st.metric("Max Discount %", f"{promo_df['discount_%'].max():.1f}%")
+                
+                # Price trend chart
+                st.markdown("#### 📉 Price Trend Chart")
+                
+                prices_list = price_data.get('price_history', [])
+                if len(prices_list) > 1:
+                    dates = [p['date'] for p in prices_list]
+                    price_values = [float(p['price']) for p in prices_list]
+                    
+                    fig, ax = plt.subplots(figsize=(10, 5))
+                    fig.patch.set_facecolor('#1a1a2e')
+                    ax.set_facecolor('#1a1a2e')
+                    
+                    ax.plot(range(len(dates)), price_values, marker='o',
+                           linewidth=3, markersize=8, color='#14b8a6')
+                    
+                    # Mark promotions
+                    for promo in promotions:
+                        try:
+                            idx = dates.index(promo['date'])
+                            ax.scatter(idx, price_values[idx], s=200,
+                                     color='#ff6b6b', marker='*', zorder=5)
+                        except:
+                            pass
+                    
+                    ax.set_xticks(range(len(dates)))
+                    ax.set_xticklabels(dates, rotation=45, ha='right',
+                                      color='white', fontsize=8)
+                    ax.set_ylabel("Price ($)", color='white', fontsize=10, fontweight='bold')
+                    ax.tick_params(axis='y', labelcolor='white')
+                    ax.spines['top'].set_visible(False)
+                    ax.spines['right'].set_visible(False)
+                    ax.spines['left'].set_color('#14b8a6')
+                    ax.spines['bottom'].set_color('white')
+                    ax.grid(axis='y', alpha=0.15, color='white', linestyle='--')
+                    
+                    plt.tight_layout()
+                    st.pyplot(fig, use_container_width=True)
+            else:
+                st.info("ℹ️ No promotions detected yet.")
+        else:
+            st.warning("❌ Could not fetch data. Check ASIN format.")
+
+    elif not RAPIDAPI_KEY:
+        st.warning("⚠️ RapidAPI key not configured. Add RAPIDAPI_KEY to .streamlit/secrets.toml")
+        
+        with st.expander("📖 Setup Instructions"):
+            st.markdown("""
+            1. Go to **https://rapidapi.com** and sign up (free)
+            2. Go to Dashboard → Copy your API Key
+            3. Create `.streamlit/secrets.toml`:
+               ```
+               RAPIDAPI_KEY = "your_key_here"
+               ```
+            4. Save and restart the app
+            5. Enter an ASIN to test
+            """)
+    else:
+        st.info("👆 Enter an ASIN above to fetch promotion data")
+
 st.markdown("---")
-st.caption("Data from Google Shopping API via SerpAPI. Charts show brand market share, product quality, and review metrics.")
+st.caption("📊 Data from Google Shopping API via SerpAPI & Amazon price history via RapidAPI. Charts show brand market share, product quality, review metrics, and real-time promotion tracking.")
