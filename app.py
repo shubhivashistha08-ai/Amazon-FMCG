@@ -47,20 +47,22 @@ st.markdown("### 📊 Market Overview & Key Metrics")
 if df.empty:
     st.warning("❌ No data available. Click **Refresh market data** above.")
 else:
-    # KPIs
+    # SAFE: Check if columns exist before using them
     total_products = df["product_id"].nunique()
-    total_est_sales = df["sales_estimate"].sum()
-    avg_social_reach = df["social_reach_score"].mean()
-    avg_campaign_potential = df["campaign_potential"].mean()
+    
+    # Safe column access with defaults
+    total_est_sales = df["sales_estimate"].sum() if "sales_estimate" in df.columns else df["sales_proxy"].sum()
+    avg_social_reach = df["social_reach_score"].mean() if "social_reach_score" in df.columns else 0
+    avg_campaign_potential = df["campaign_potential"].mean() if "campaign_potential" in df.columns else 0
     unique_brands = df["brand"].nunique()
     avg_rating = df["rating"].dropna().mean()
 
     col1, col2, col3, col4, col5, col6 = st.columns(6)
     col1.metric("🛍️ Products", total_products)
-    col2.metric("📈 Total Est. Sales", f"{total_est_sales:,} units/mo")
-    col3.metric("📱 Avg Social Reach", f"{avg_social_reach:.0f}/100")
-    col4.metric("🚀 Campaign Potential", f"{avg_campaign_potential:.0f}%")
-    col5.metric("⭐ Avg Rating", f"{avg_rating:.2f}")
+    col2.metric("📈 Total Est. Sales", f"{int(total_est_sales):,} units/mo" if total_est_sales > 0 else "N/A")
+    col3.metric("📱 Avg Social Reach", f"{avg_social_reach:.0f}/100" if avg_social_reach > 0 else "N/A")
+    col4.metric("🚀 Campaign Potential", f"{avg_campaign_potential:.0f}%" if avg_campaign_potential > 0 else "N/A")
+    col5.metric("⭐ Avg Rating", f"{avg_rating:.2f}" if pd.notna(avg_rating) else "N/A")
     col6.metric("🏢 Brands", unique_brands)
 
     # ================================================
@@ -76,10 +78,10 @@ else:
         st.markdown("#### 📈 Brand Sales Estimate & Quality")
 
         brand_stats = df.groupby("brand").agg({
-            "sales_estimate": "sum",
+            "sales_estimate" if "sales_estimate" in df.columns else "sales_proxy": "sum",
             "rating": "mean"
         }).rename(columns={
-            "sales_estimate": "total_sales",
+            "sales_estimate" if "sales_estimate" in df.columns else "sales_proxy": "total_sales",
             "rating": "avg_rating"
         }).sort_values("total_sales", ascending=False).head(10)
 
@@ -144,100 +146,103 @@ else:
         plt.tight_layout()
         st.pyplot(fig, use_container_width=True)
 
-    # RIGHT: Social Reach Distribution
+    # RIGHT: Social Reach Distribution (if available)
     with col_social_reach:
-        st.markdown("#### 📱 Social Reach Distribution")
+        if "social_reach_score" in df.columns and "campaign_potential" in df.columns:
+            st.markdown("#### 📱 Social Reach vs Campaign Potential")
 
-        # Create scatter: Campaign Potential vs Social Reach (sized by sales)
-        fig, ax = plt.subplots(figsize=(8, 5))
-        fig.patch.set_facecolor('#0a0e27')
-        ax.set_facecolor('#0a0e27')
+            fig, ax = plt.subplots(figsize=(8, 5))
+            fig.patch.set_facecolor('#0a0e27')
+            ax.set_facecolor('#0a0e27')
 
-        scatter = ax.scatter(
-            df["social_reach_score"],
-            df["campaign_potential"],
-            s=df["sales_estimate"] / 2,  # Size by sales
-            c=df["rating"].fillna(3),
-            cmap="viridis",
-            alpha=0.6,
-            edgecolors='white',
-            linewidth=0.5
-        )
+            scatter = ax.scatter(
+                df["social_reach_score"],
+                df["campaign_potential"],
+                s=df["sales_estimate"].fillna(100) / 2 if "sales_estimate" in df.columns else 50,
+                c=df["rating"].fillna(3),
+                cmap="viridis",
+                alpha=0.6,
+                edgecolors='white',
+                linewidth=0.5
+            )
 
-        ax.set_xlabel("Social Reach Score (0-100)", color="white", fontsize=10, fontweight="bold")
-        ax.set_ylabel("Campaign Potential (%)", color="white", fontsize=10, fontweight="bold")
-        ax.tick_params(axis='both', labelcolor="white", labelsize=8)
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('white')
-        ax.spines['bottom'].set_color('white')
-        ax.grid(alpha=0.15, color='white', linestyle='--')
+            ax.set_xlabel("Social Reach Score (0-100)", color="white", fontsize=10, fontweight="bold")
+            ax.set_ylabel("Campaign Potential (%)", color="white", fontsize=10, fontweight="bold")
+            ax.tick_params(axis='both', labelcolor="white", labelsize=8)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color('white')
+            ax.spines['bottom'].set_color('white')
+            ax.grid(alpha=0.15, color='white', linestyle='--')
 
-        # Colorbar
-        cbar = plt.colorbar(scatter, ax=ax)
-        cbar.set_label("Rating", color="white", fontsize=9, fontweight="bold")
-        cbar.ax.tick_params(labelcolor="white", labelsize=8)
+            # Colorbar
+            cbar = plt.colorbar(scatter, ax=ax)
+            cbar.set_label("Rating", color="white", fontsize=9, fontweight="bold")
+            cbar.ax.tick_params(labelcolor="white", labelsize=8)
 
-        # Add legend for bubble size
-        bubble_sizes = [50, 200, 500]
-        bubble_labels = ["Low Sales", "Med Sales", "High Sales"]
-        for size, label in zip(bubble_sizes, bubble_labels):
-            ax.scatter([], [], s=size/2, c='#14b8a6', alpha=0.6, edgecolors='white', label=label)
-        ax.legend(loc='upper left', facecolor='#0a0e27', edgecolor='white',
-                 labelcolor='white', fontsize=8, scatterpoints=1)
-
-        plt.tight_layout()
-        st.pyplot(fig, use_container_width=True)
+            plt.tight_layout()
+            st.pyplot(fig, use_container_width=True)
+        else:
+            st.markdown("#### 📱 Top Products by Reviews")
+            if "review_count" in df.columns:
+                top_products = df.nlargest(8, "review_count")[["title", "review_count", "rating"]].copy()
+                top_products.columns = ["Product", "Reviews", "Rating"]
+                st.dataframe(top_products, use_container_width=True, hide_index=True)
+            else:
+                st.info("Social reach data not yet available. Click refresh to load.")
 
     # ================================================
     # SECTION 3: CAMPAIGN PERFORMANCE & INSIGHTS
     # ================================================
-    st.markdown("---")
-    st.markdown("### 🎯 Campaign Performance & Top Opportunities")
+    if "campaign_potential" in df.columns:
+        st.markdown("---")
+        st.markdown("### 🎯 Campaign Performance & Top Opportunities")
 
-    col_top_campaigns, col_price_pos = st.columns(2)
+        col_top_campaigns, col_price_pos = st.columns(2)
 
-    with col_top_campaigns:
-        st.markdown("#### 🚀 Products with Highest Campaign Potential")
-        top_campaigns = df.nlargest(5, "campaign_potential")[
-            ["title", "brand", "campaign_potential", "social_reach_score", "sales_estimate"]
-        ].reset_index(drop=True)
+        with col_top_campaigns:
+            st.markdown("#### 🚀 Products with Highest Campaign Potential")
+            top_campaigns = df.nlargest(5, "campaign_potential")[
+                ["title", "brand", "campaign_potential", "social_reach_score", "sales_estimate"]
+            ].reset_index(drop=True)
 
-        # Format for display
-        display_df = top_campaigns.copy()
-        display_df.columns = ["Product", "Brand", "Potential %", "Social Score", "Est. Sales/mo"]
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+            display_df = top_campaigns.copy()
+            display_df.columns = ["Product", "Brand", "Potential %", "Social Score", "Est. Sales/mo"]
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    with col_price_pos:
-        st.markdown("#### 💰 Price Positioning Strategy")
+        with col_price_pos:
+            st.markdown("#### 💰 Price Positioning Strategy")
 
-        price_bins = pd.cut(df["price_vs_market"], bins=5)
-        price_dist = df.groupby(price_bins)["product_id"].count()
+            if "price_vs_market" in df.columns:
+                price_bins = pd.cut(df["price_vs_market"], bins=5)
+                price_dist = df.groupby(price_bins, observed=True)["product_id"].count()
 
-        fig, ax = plt.subplots(figsize=(8, 4))
-        fig.patch.set_facecolor('#0a0e27')
-        ax.set_facecolor('#0a0e27')
+                fig, ax = plt.subplots(figsize=(8, 4))
+                fig.patch.set_facecolor('#0a0e27')
+                ax.set_facecolor('#0a0e27')
 
-        colors = ['#c0152f', '#e67961', '#14b8a6', '#0d7377', '#134252']
-        bars = ax.bar(range(len(price_dist)), price_dist.values, color=colors[:len(price_dist)],
-                     alpha=0.8, edgecolor='white', linewidth=1.5)
+                colors = ['#c0152f', '#e67961', '#14b8a6', '#0d7377', '#134252']
+                bars = ax.bar(range(len(price_dist)), price_dist.values, color=colors[:len(price_dist)],
+                             alpha=0.8, edgecolor='white', linewidth=1.5)
 
-        for i, val in enumerate(price_dist.values):
-            ax.text(i, val + 0.1, str(int(val)), ha='center', va='bottom',
-                   color='white', fontweight='bold', fontsize=9)
+                for i, val in enumerate(price_dist.values):
+                    ax.text(i, val + 0.1, str(int(val)), ha='center', va='bottom',
+                           color='white', fontweight='bold', fontsize=9)
 
-        ax.set_ylabel("Product Count", color="white", fontsize=10, fontweight="bold")
-        ax.set_xlabel("Price Position vs Market Avg", color="white", fontsize=10, fontweight="bold")
-        ax.tick_params(axis='both', labelcolor="white", labelsize=8)
-        ax.set_xticklabels([f"{i}" for i in range(len(price_dist))], color="white")
-        ax.spines['top'].set_visible(False)
-        ax.spines['right'].set_visible(False)
-        ax.spines['left'].set_color('white')
-        ax.spines['bottom'].set_color('white')
-        ax.grid(axis='y', alpha=0.15, color='white', linestyle='--')
+                ax.set_ylabel("Product Count", color="white", fontsize=10, fontweight="bold")
+                ax.set_xlabel("Price Position vs Market Avg", color="white", fontsize=10, fontweight="bold")
+                ax.tick_params(axis='both', labelcolor="white", labelsize=8)
+                ax.set_xticklabels([f"{i}" for i in range(len(price_dist))], color="white")
+                ax.spines['top'].set_visible(False)
+                ax.spines['right'].set_visible(False)
+                ax.spines['left'].set_color('white')
+                ax.spines['bottom'].set_color('white')
+                ax.grid(axis='y', alpha=0.15, color='white', linestyle='--')
 
-        plt.tight_layout()
-        st.pyplot(fig, use_container_width=True)
+                plt.tight_layout()
+                st.pyplot(fig, use_container_width=True)
+            else:
+                st.info("Price positioning data not yet available.")
 
     # ================================================
     # SECTION 4: PRODUCT SELECTOR & DETAILED ANALYSIS
@@ -248,9 +253,18 @@ else:
     if not df.empty:
         # Product selector - CLEAN: Show only product title
         product_options = df[
-            ["product_id", "title", "brand", "rating", "review_count",
-             "sales_estimate", "social_reach_score", "campaign_potential", "price"]
+            ["product_id", "title", "brand", "rating", "review_count"]
         ].drop_duplicates().reset_index(drop=True)
+
+        # Add optional columns if they exist
+        if "sales_estimate" in df.columns:
+            product_options["sales_estimate"] = df.groupby("product_id")["sales_estimate"].first()
+        if "social_reach_score" in df.columns:
+            product_options["social_reach_score"] = df.groupby("product_id")["social_reach_score"].first()
+        if "campaign_potential" in df.columns:
+            product_options["campaign_potential"] = df.groupby("product_id")["campaign_potential"].first()
+        if "price" in df.columns:
+            product_options["price"] = df.groupby("product_id")["price"].first()
 
         selected_idx = st.selectbox(
             "Select a product for detailed analysis:",
@@ -268,26 +282,42 @@ else:
             st.metric("🏢 Brand", selected_prod["brand"])
 
         with col_card2:
-            st.metric("⭐ Rating", f"{selected_prod['rating']:.2f}")
+            st.metric("⭐ Rating", f"{selected_prod['rating']:.2f}" if pd.notna(selected_prod['rating']) else "N/A")
 
         with col_card3:
-            st.metric("💬 Reviews", int(selected_prod["review_count"]))
+            st.metric("💬 Reviews", int(selected_prod["review_count"]) if pd.notna(selected_prod["review_count"]) else 0)
 
         with col_card4:
-            st.metric("📈 Est. Sales", f"{int(selected_prod['sales_estimate'])} units/mo")
+            if "sales_estimate" in product_options.columns and pd.notna(selected_prod.get("sales_estimate")):
+                st.metric("📈 Est. Sales", f"{int(selected_prod['sales_estimate'])} units/mo")
+            else:
+                st.metric("📈 Est. Sales", "N/A")
 
-        # Additional product insights
-        col_details1, col_details2, col_details3 = st.columns(3)
+        # Additional product insights (if data available)
+        has_insights = ("social_reach_score" in product_options.columns or 
+                       "campaign_potential" in product_options.columns or 
+                       "price" in product_options.columns)
+        
+        if has_insights:
+            col_details1, col_details2, col_details3 = st.columns(3)
 
-        with col_details1:
-            st.metric("📱 Social Score", f"{int(selected_prod['social_reach_score'])}/100")
+            with col_details1:
+                if "social_reach_score" in product_options.columns and pd.notna(selected_prod.get("social_reach_score")):
+                    st.metric("📱 Social Score", f"{int(selected_prod['social_reach_score'])}/100")
+                else:
+                    st.metric("📱 Social Score", "N/A")
 
-        with col_details2:
-            st.metric("🚀 Campaign Potential", f"{int(selected_prod['campaign_potential'])}%")
+            with col_details2:
+                if "campaign_potential" in product_options.columns and pd.notna(selected_prod.get("campaign_potential")):
+                    st.metric("🚀 Campaign Potential", f"{int(selected_prod['campaign_potential'])}%")
+                else:
+                    st.metric("🚀 Campaign Potential", "N/A")
 
-        with col_details3:
-            price_pos = selected_prod["price"]
-            st.metric("💵 Price", f"${price_pos:.2f}" if price_pos else "N/A")
+            with col_details3:
+                if "price" in product_options.columns and pd.notna(selected_prod.get("price")):
+                    st.metric("💵 Price", f"${selected_prod['price']:.2f}")
+                else:
+                    st.metric("💵 Price", "N/A")
 
     else:
         st.warning("Refresh data first to select a product.")
@@ -318,11 +348,13 @@ else:
         if selected_prod is not None:
             context_prompt = (
                 f"For product '{selected_prod['title']}' (brand: {selected_prod['brand']}, "
-                f"rating: {selected_prod['rating']:.2f}, reviews: {int(selected_prod['review_count'])}, "
-                f"est. sales: {int(selected_prod['sales_estimate'])} units/mo, "
-                f"social score: {int(selected_prod['social_reach_score'])}/100), "
-                f"provide campaign strategy. User asks: {prompt}"
+                f"rating: {selected_prod['rating']:.2f}, reviews: {int(selected_prod['review_count'])}"
             )
+            if "sales_estimate" in product_options.columns and pd.notna(selected_prod.get("sales_estimate")):
+                context_prompt += f", est. sales: {int(selected_prod['sales_estimate'])} units/mo"
+            if "social_reach_score" in product_options.columns and pd.notna(selected_prod.get("social_reach_score")):
+                context_prompt += f", social score: {int(selected_prod['social_reach_score'])}/100"
+            context_prompt += f"), provide campaign strategy. User asks: {prompt}"
         else:
             context_prompt = prompt
 
