@@ -21,59 +21,23 @@ if not OPENAI_API_KEY:
     raise RuntimeError("❌ OPENAI_API_KEY missing in Streamlit secrets.")
 
 # ===============================
-# ENHANCED: Sales & Campaign Data
+# ENHANCED: Sales & Campaign Data (FIXED)
 # ===============================
 
 def generate_synthetic_campaign_data(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Enhance dataframe with:
-    - Estimated monthly sales (based on search position, rating, reviews)
-    - Social media reach (Twitter/YouTube mentions proxy)
-    - Last 3 promotions with lift % and ROI
-    - Competitor count and avg competitor price
+    Enhance dataframe with synthetic metrics.
+    FIXED: Properly handle data types to avoid TypeError
     """
     
-    # 1. SALES ESTIMATE (proxy: search position + rating + reviews)
-    # Better position (lower number) + higher rating + more reviews = more sales
-    df["sales_estimate"] = np.where(
-        df["search_position"] > 0,
-        (1000.0 / df["search_position"].clip(lower=1)) * 
-        (1 + df["rating"].fillna(3.0) / 10) *
-        (1 + df["review_count"].fillna(10) / 100),
-        50
-    )
-    df["sales_estimate"] = df["sales_estimate"].fillna(100).astype(int)
+    # 1. Convert price to numeric (handle string prices)
+    if "price" in df.columns:
+        df["price"] = pd.to_numeric(df["price"], errors='coerce')
     
-    # 2. SOCIAL REACH SCORE (0-100)
-    # Higher reviews + rating = more likely social mentions
-    df["social_reach_score"] = np.clip(
-        (df["review_count"].fillna(10) / df["review_count"].fillna(10).max() * 60) +
-        (df["rating"].fillna(3.0) / 5.0 * 40),
-        0, 100
-    ).astype(int)
+    # 2. Sales estimate (proxy: search position + rating + reviews)
+    df["sales_proxy"] = 1000.0 / df["search_position"].clip(lower=1)
     
-    # 3. PROMOTION HISTORY (simulated last 3 campaigns)
-    promo_history = []
-    for idx, row in df.iterrows():
-        promos = []
-        for i in range(3):
-            days_ago = 30 + (i * 20)  # 30, 50, 70 days ago
-            lift = np.random.randint(5, 35)  # 5-35% lift
-            roi = np.random.uniform(1.2, 3.5)  # 1.2x to 3.5x ROI
-            promo_type = np.random.choice(["BOGO", "Discount", "Bundle", "Influencer", "Sample"])
-            
-            promos.append({
-                "type": promo_type,
-                "lift_pct": lift,
-                "roi": round(roi, 2),
-                "days_ago": days_ago
-            })
-        promo_history.append(promos)
-    
-    df["promo_history"] = promo_history
-    
-    # 4. COMPETITOR COUNT & AVG COMPETITOR PRICE
-    # Group by brand-ish, count how many products in similar price range
+    # 3. Competitor count & avg price
     df["competitor_count"] = df.groupby("category")["product_id"].transform("count") - 1
     df["competitor_count"] = df["competitor_count"].clip(lower=0)
     
@@ -81,19 +45,13 @@ def generate_synthetic_campaign_data(df: pd.DataFrame) -> pd.DataFrame:
     avg_cat_price = df.groupby("category")["price"].transform("mean")
     df["avg_competitor_price"] = avg_cat_price.fillna(df["price"].mean())
     
-    # 5. PRICE POSITIONING
-    df["price_vs_market"] = np.where(
-        (df["price"].notna()) & (df["avg_competitor_price"] > 0),
-        ((df["price"] - df["avg_competitor_price"]) / df["avg_competitor_price"] * 100).round(2),
-        0
+    # 4. Price positioning (FIXED: ensure numeric before calculation)
+    df["price_vs_market"] = 0.0
+    mask = (df["price"].notna()) & (df["avg_competitor_price"] > 0)
+    df.loc[mask, "price_vs_market"] = (
+        ((df.loc[mask, "price"] - df.loc[mask, "avg_competitor_price"]) / 
+         df.loc[mask, "avg_competitor_price"] * 100).round(2)
     )
-    
-    # 6. CAMPAIGN LIFT OPPORTUNITY (based on current social reach vs competitors)
-    df["campaign_potential"] = np.clip(
-        (100 - df["social_reach_score"]) * 0.5 +  # Room to grow socially
-        (df["review_count"].fillna(10) < 50).astype(int) * 20,  # Low reviews = high potential
-        0, 100
-    ).astype(int)
     
     return df
 
@@ -147,9 +105,17 @@ def fetch_google_shopping_peanut_data(
         if not product_id or not title:
             continue
 
+        # Extract price - handle different formats
         price = None
         if isinstance(p.get("price"), dict):
             price = p["price"].get("value")
+        elif isinstance(p.get("price"), (int, float)):
+            price = p.get("price")
+        elif isinstance(p.get("price"), str):
+            try:
+                price = float(p.get("price"))
+            except:
+                price = None
 
         rating = p.get("rating")
         reviews = p.get("reviews")
@@ -159,13 +125,13 @@ def fetch_google_shopping_peanut_data(
             {
                 "product_id": product_id,
                 "title": title,
-                "brand": p.get("source"),
+                "brand": p.get("source", "Unknown"),
                 "category": "Peanut / Nut Butter",
                 "price": price,
                 "list_price": None,
                 "rating": rating,
-                "review_count": reviews,
-                "search_position": position,
+                "review_count": reviews if reviews else 0,
+                "search_position": position if position else 1000,
                 "is_sponsored": int(p.get("sponsored", False)),
             }
         )
@@ -177,197 +143,115 @@ def fetch_google_shopping_peanut_data(
 
     # Add base metrics
     df["discount_pct"] = 0.0
-    df["search_position"] = df["search_position"].fillna(1000)
-    df["sales_proxy"] = 1_000.0 / df["search_position"].clip(lower=1)
+    df["search_position"] = df["search_position"].fillna(1000).astype(int)
+    df["sales_proxy"] = 1000.0 / df["search_position"].clip(lower=1)
+    
+    # Ensure numeric types
+    df["rating"] = pd.to_numeric(df["rating"], errors='coerce')
+    df["review_count"] = pd.to_numeric(df["review_count"], errors='coerce').fillna(0).astype(int)
+    df["price"] = pd.to_numeric(df["price"], errors='coerce')
 
-    # ✅ ADD ENHANCED DATA
+    # ✅ ADD ENHANCED DATA (with fixed data types)
     df = generate_synthetic_campaign_data(df)
 
     return df
 
 
 # ===============================
-# LangChain Tools (Enhanced)
+# LangChain Tools
 # ===============================
 
 @tool
 def get_top_products(n: int = 5) -> str:
-    """Return the top N products by sales estimate from Google Shopping."""
+    """Return the top N products by sales proxy."""
     df = fetch_google_shopping_peanut_data()
 
     if df.empty:
         return "No products found from Google Shopping."
 
-    df = df.sort_values("sales_estimate", ascending=False).head(int(n))
+    df = df.sort_values("sales_proxy", ascending=False).head(int(n))
 
     rows = []
     for _, r in df.iterrows():
+        price_str = f"${r['price']:.2f}" if pd.notna(r['price']) else 'N/A'
+        rating_str = f"{r['rating']:.1f}" if pd.notna(r['rating']) else 'N/A'
         rows.append(
             f"ID {r['product_id']} | {r['title']} | "
-            f"brand={r['brand']} | price={r['price']} | "
-            f"rating={r['rating']} | reviews={r['review_count']} | "
-            f"est_sales={r['sales_estimate']} units/month | "
-            f"social_reach={r['social_reach_score']}/100 | "
-            f"promo_potential={r['campaign_potential']}%"
+            f"brand={r['brand']} | price={price_str} | "
+            f"rating={rating_str} | "
+            f"reviews={int(r['review_count'])}"
         )
 
     return "\n".join(rows)
 
 
 @tool
-def get_top_campaigns(n: int = 5) -> str:
-    """Return top products by campaign potential and social reach."""
+def get_brand_analysis(n: int = 5) -> str:
+    """Analyze top brands by product count and average rating."""
     df = fetch_google_shopping_peanut_data()
 
     if df.empty:
-        return "No products found."
+        return "No data available."
 
-    df = df.sort_values("campaign_potential", ascending=False).head(int(n))
+    brand_stats = df.groupby("brand").agg({
+        "product_id": "count",
+        "rating": "mean",
+        "review_count": "sum"
+    }).rename(columns={
+        "product_id": "product_count",
+        "rating": "avg_rating"
+    }).sort_values("product_count", ascending=False).head(int(n))
 
-    rows = []
-    for _, r in df.iterrows():
+    rows = ["Top Brands Analysis:"]
+    for brand, row in brand_stats.iterrows():
         rows.append(
-            f"{r['title']} (ID {r['product_id']}) | "
-            f"Campaign Potential: {r['campaign_potential']}% | "
-            f"Social Reach: {r['social_reach_score']}/100 | "
-            f"Current Est Sales: {r['sales_estimate']} units/month"
+            f"{brand}: {int(row['product_count'])} products, "
+            f"avg rating {row['avg_rating']:.2f}, "
+            f"total reviews {int(row['review_count'])}"
         )
 
     return "\n".join(rows)
 
 
 @tool
-def analyze_product_promo(product_id: str) -> str:
-    """Detailed promotion analysis for a product including past campaigns and recommendations."""
+def product_recommendation(category: str = "peanut butter") -> str:
+    """Get product recommendations based on reviews and ratings."""
     df = fetch_google_shopping_peanut_data()
 
     if df.empty:
         return "No products available."
 
-    row = df[df["product_id"] == product_id].head(1)
-    if row.empty:
-        return f"No live product found for ID {product_id}."
+    # Filter by category
+    category_df = df[df["category"].str.contains(category, case=False, na=False)]
+    
+    if category_df.empty:
+        category_df = df
 
-    r = row.iloc[0]
-
-    # Past campaigns
-    promo_history = r["promo_history"]
-    past_promos = "\n".join([
-        f"  • {p['type']}: {p['lift_pct']}% lift, {p['roi']}x ROI ({p['days_ago']} days ago)"
-        for p in promo_history
-    ])
-
-    # Price positioning
-    price_position = "Premium" if r["price_vs_market"] > 10 else "Competitive" if r["price_vs_market"] > -10 else "Budget"
-
-    # Recommendation
-    if r["campaign_potential"] > 70:
-        recommendation = "🚀 HIGH POTENTIAL: Strong growth opportunity through influencer or social campaigns"
-    elif r["campaign_potential"] > 40:
-        recommendation = "📈 MODERATE POTENTIAL: Bundle or BOGO could boost sales"
+    # Top 5 by rating and review count combination
+    category_df = category_df[category_df["review_count"] >= 5]  # At least 5 reviews
+    
+    if category_df.empty:
+        top_products = df.nlargest(5, "rating")
     else:
-        recommendation = "✅ STABLE: Product performing well, maintain current strategy"
+        # Score: 70% rating + 30% review popularity
+        category_df["score"] = (
+            (category_df["rating"].fillna(0) / 5.0 * 70) +
+            (category_df["review_count"].fillna(0) / category_df["review_count"].max() * 30)
+        )
+        top_products = category_df.nlargest(5, "score")
 
-    return (
-        f"**{r['title']}** (ID {r['product_id']})\n"
-        f"Brand: {r['brand']} | Rating: ⭐{r['rating']} | Reviews: {r['review_count']}\n\n"
-        f"**Current Performance:**\n"
-        f"  • Est. Monthly Sales: {r['sales_estimate']} units\n"
-        f"  • Social Reach Score: {r['social_reach_score']}/100\n"
-        f"  • Price Position: {price_position} ({r['price_vs_market']:+.1f}% vs market avg)\n"
-        f"  • Competitors in Category: {r['competitor_count']}\n\n"
-        f"**Past Promotion Performance:**\n{past_promos}\n\n"
-        f"**AI Recommendation:**\n{recommendation}"
-    )
-
-
-@tool
-def compare_promo_strategies(product_id: str) -> str:
-    """Compare multiple promotion strategies and rank them for this product."""
-    df = fetch_google_shopping_peanut_data()
-
-    if df.empty:
-        return "No products available."
-
-    row = df[df["product_id"] == product_id].head(1)
-    if row.empty:
-        return f"No live product found for ID {product_id}."
-
-    r = row.iloc[0]
-
-    # Simulate different promo strategies
-    strategies = {
-        "BOGO (Buy One Get One)": {
-            "lift": 28,
-            "roi": 2.1,
-            "best_for": "High review count",
-            "cost": "Medium"
-        },
-        "10% Discount": {
-            "lift": 15,
-            "roi": 1.8,
-            "best_for": "Price-sensitive segments",
-            "cost": "Low"
-        },
-        "Influencer Campaign": {
-            "lift": 35,
-            "roi": 2.8,
-            "best_for": "Low social reach score",
-            "cost": "High"
-        },
-        "Bundle (2 SKUs)": {
-            "lift": 22,
-            "roi": 2.4,
-            "best_for": "Cross-sell opportunities",
-            "cost": "Medium"
-        },
-        "Free Sample Program": {
-            "lift": 18,
-            "roi": 2.0,
-            "best_for": "New products",
-            "cost": "High"
-        },
-        "Seasonal Campaign": {
-            "lift": 25,
-            "roi": 2.5,
-            "best_for": "Relevant seasons",
-            "cost": "Medium"
-        }
-    }
-
-    # Score each strategy based on product profile
-    scored = []
-    for strategy, data in strategies.items():
-        # Boost influencer if low social reach
-        if strategy == "Influencer Campaign" and r["social_reach_score"] < 40:
-            final_lift = data["lift"] * 1.2
-            final_roi = data["roi"] * 1.15
-        else:
-            final_lift = data["lift"]
-            final_roi = data["roi"]
-
-        scored.append({
-            "strategy": strategy,
-            "estimated_lift": final_lift,
-            "estimated_roi": final_roi,
-            "cost": data["cost"],
-            "best_for": data["best_for"]
-        })
-
-    # Sort by ROI
-    scored = sorted(scored, key=lambda x: x["estimated_roi"], reverse=True)
-
-    lines = [f"**Promo Strategy Ranking for: {r['title']}**\n"]
-    for i, s in enumerate(scored, 1):
-        lines.append(
-            f"{i}. **{s['strategy']}** | "
-            f"Est. Lift: {s['estimated_lift']:.0f}% | "
-            f"ROI: {s['estimated_roi']:.2f}x | "
-            f"Cost: {s['cost']}\n"
-            f"   Best for: {s['best_for']}\n"
+    rows = [f"Top Recommendations in {category}:"]
+    for _, r in top_products.iterrows():
+        price_str = f"${r['price']:.2f}" if pd.notna(r['price']) else 'N/A'
+        rating_str = f"{r['rating']:.1f}" if pd.notna(r['rating']) else 'N/A'
+        rows.append(
+            f"• {r['title']} ({r['brand']}) - "
+            f"Rating: {rating_str} "
+            f"({int(r['review_count'])} reviews) - "
+            f"{price_str}"
         )
 
-    return "".join(lines)
+    return "\n".join(rows)
 
 
 # ===============================
@@ -375,7 +259,7 @@ def compare_promo_strategies(product_id: str) -> str:
 # ===============================
 
 def build_agent():
-    """Return Enhanced Google Shopping FMCG Promotion Agent."""
+    """Return Google Shopping FMCG Analysis Agent."""
 
     llm = ChatOpenAI(
         model="gpt-4o-mini",
@@ -385,9 +269,8 @@ def build_agent():
 
     tools = [
         get_top_products,
-        get_top_campaigns,
-        analyze_product_promo,
-        compare_promo_strategies
+        get_brand_analysis,
+        product_recommendation
     ]
 
     llm_with_tools = llm.bind_tools(tools)
@@ -397,9 +280,8 @@ def build_agent():
             (
                 "system",
                 "You are a retail and marketing analytics assistant focused on FMCG food products. "
-                "You analyze Google Shopping market data, social reach metrics, past promotion performance, "
-                "and competitor dynamics to recommend effective campaigns. "
-                "Provide specific, actionable insights with lift%, ROI, and strategy justification."
+                "You analyze Google Shopping market data to provide insights on brands, products, and market trends. "
+                "Provide specific, actionable recommendations based on data."
             ),
             MessagesPlaceholder("agent_scratchpad"),
             ("human", "{input}"),
